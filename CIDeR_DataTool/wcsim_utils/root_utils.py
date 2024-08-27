@@ -2,7 +2,7 @@ import ROOT
 import os
 import numpy as np
 
-ROOT.gSystem.Load(os.environ['WCSIMDIR'] + "/libWCSimRoot.so")
+ROOT.gSystem.Load(os.environ['WCSIMDIR'] + "/lib/libWCSimRoot.so")
 
 
 class WCSim:
@@ -122,6 +122,7 @@ class WCSim:
             "trigger": np.asarray(trigger, dtype=np.int32)
         }
         return hits
+    
 class WCSimFile(WCSim):
     def __init__(self, filename):
         self.file = ROOT.TFile(filename, "read")
@@ -129,8 +130,9 @@ class WCSimFile(WCSim):
         self.geotree = self.file.Get("wcsimGeoT")
         super().__init__(tree)
 
-    def __del__(self):
-        self.file.Close()
+    #def __del__(self):
+    #    if self.file is not None:
+    #        self.file.Close()
 
 
 class WCSimChain(WCSim):

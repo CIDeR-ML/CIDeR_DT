@@ -7,17 +7,25 @@ Authors: Junjie Xia
 import numpy as np
 import h5py
 import glob
-from cachetools import cached, LRUCache
+import ROOT
 
-from root_utils import WCSim, WCSimFile
+from cachetools import cached, LRUCache
 
 ROOT.gROOT.SetBatch(True)
 cache = LRUCache(maxsize=100)
+
+dtype_map = {
+    'np.int32': np.int32,
+    'np.float32': np.float32,
+    'np.float64': np.float64,
+    'np.int64': np.int64,
+    'np.int16': np.int16,
+    'np.uint8': np.uint8,
+}
+
 class WCSimRead():
     def __init__(self, cfg: dict):
         self.cfg = cfg
-        self.event_info_cfg = cfg['event_info']
-
         self.file_name = cfg['data']['file_name']
         self.outfile = cfg['data']['output_file']
         self.npmts = cfg['detector']['npmts']
@@ -37,14 +45,23 @@ class WCSimRead():
         self.read_root_files()
         self.initialized = False
 
+#    def __del__(self):
+#        for wfile in self.wcsim:
+#            wfile.file.Close()
+
     def read_root_files(self):
+        from . import WCSimFile, WCSim
         for infile in self.infiles:
             self.wcsim.append(WCSimFile(infile))
-            self.nevents += self.wcsim[-1].nevent()
+            super().__init__()
+            self.nevents += self.wcsim[-1].tree.nevent()
+            
     def get_nevent_perfile(self, i):
         return self.wcsim[i].nevent()
+    
     def get_nevents(self):
         return self.nevents
+    
     @cached(cache)
     def get_event(self, i):
         file_index = int(i/len(self.wcsim))
@@ -113,23 +130,23 @@ class WCSimRead():
 
         if self.write_event_info:
             for value in self.cfg['data']['root_branches']['event_info']:
-                self.root_inputs[value[0]] = np.empty((self.nevents, int(value[-1])), dtype=value[1])
+                self.root_inputs[value[0]] = np.empty((self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
 
         if self.write_hit_photons:
             for value in self.cfg['data']['root_branches']['hit_photons']:
-                self.root_inputs['true_'+value[0]]  = np.empty((self.nevents, int(value[-1])), dtype=value[1])
+                self.root_inputs['true_'+value[0]]  = np.empty((self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
 
         if self.write_digi_hits:
             for value in self.cfg['data']['root_branches']['digi_hits']:
-                self.root_inputs['digi_'+value[0]]  = np.empty((self.nevents, int(value[-1])), dtype=value[1])
+                self.root_inputs['digi_'+value[0]]  = np.empty((self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
 
         if self.write_tracks:
             for value in self.cfg['data']['root_branches']['tracks']:
-                self.root_inputs['track_'+value[0]] = np.empty((self.nevents, int(values[-1])), dtype=value[1])
+                self.root_inputs['track_'+value[0]] = np.empty((self.nevents, int(values[-1])), dtype=dtype_map.get(value[1]))
 
         if self.write_trigger:
             for value in self.cfg['data']['root_branches']['trigger']:
-                self.root_inputs['trigger_'+value[0]] = np.empty((self.nevents, int(values[-1])), dtype=value[1])
+                self.root_inputs['trigger_'+value[0]] = np.empty((self.nevents, int(values[-1])), dtype=dtype_map.get(value[1]))
 
     def create_h5(self):
         print("ouput file:", self.outfile)
@@ -141,23 +158,23 @@ class WCSimRead():
         self.dset['event_ids']  = self.fh5.create_dataset("event_ids", shape=(self.nevents, 1), dtype=np.int32)
         if self.write_event_info:
             for value in self.cfg['data']['root_branches']['event_info']:
-                self.dset[value[0]]            = self.fh5.create_dataset(value[0], shape=(self.nevents, int(value[-1])), dtype=value[1])
+                self.dset[value[0]]            = self.fh5.create_dataset(value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
 
         if write_hit_photons:
             for value in self.cfg['data']['root_branches']['hit_photons']:
-                self.dset['true_'+value[0]]    = self.fh5.create_dataset('true_'+value[0], shape=(self.nevents, int(value[-1])), dtype=value[1])
+                self.dset['true_'+value[0]]    = self.fh5.create_dataset('true_'+value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
 
         if write_digi_hits:
             for value in self.cfg['data']['root_branches']['digi_hits']:
-                self.dset['digi_'+value[0]]    = self.fh5.create_dataset('digi_'+value[0], shape=(self.nevents, int(value[-1])), dtype=value[1])
+                self.dset['digi_'+value[0]]    = self.fh5.create_dataset('digi_'+value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
 
         if write_tracks:
             for value in self.cfg['data']['root_branches']['tracks']:
-                self.dset['track_'+value[0]]   = self.fh5.create_dataset('track_'+value[0], shape=(self.nevents, int(value[-1])), dtype=value[1])
+                self.dset['track_'+value[0]]   = self.fh5.create_dataset('track_'+value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
 
         if write_trigger:
             for value in self.cfg['data']['root_branches']['trigger']:
-                self.dset['trigger_'+value[0]] = self.fh5.create_dataset('trigger_'+value[0], shape=(self.nevents, int(value[-1])), dtype=value[1])
+                self.dset['trigger_'+value[0]] = self.fh5.create_dataset('trigger_'+value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
 
         self.dset['veto']       = self.fh5.create_dataset("veto",shape=(self.nevents,),dtype=np.bool_)
         self.dset['veto2']      = self.fh5.create_dataset("veto2",shape=(self.nevents,),dtype=np.bool_)
