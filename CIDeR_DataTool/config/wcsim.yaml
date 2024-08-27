@@ -1,0 +1,39 @@
+# WCSim config file for ROOT->HDF5 conversion
+
+data:
+  file_name:
+  output_file:
+  n_photons: 1
+  root_branches:
+      event_info:
+        - [pid, np.int32, 1]
+        - [position, np.float32, 3]
+        - [direction, np.float32, 3]
+        - [energy, np.float32, 1]
+      hit_photons:
+        - [PE, np.int32, 10184]
+        - [end_time, np.float32, 1]
+        - [end_position, np.float32, 3]
+        - [start_time, np.float32, 1]
+        - [start_position, np.float32, 3]
+        - [track, np.int32, 1]
+      digi_hits:
+        - [pmt, np.int32, 10184] # pmt id
+        - [charge, np.float32, 10184]
+        - [time, np.float32, 10184]
+        - [trigger, np.int32, 10184] # pmt trigger id
+      tracks:
+        - [id, np,int32, 1]
+        - [pid, np.int32, 1]
+        - [start_time, np.float32, 1]
+        - [energy, np.float32, 1]
+        - [start_position, np.float32, 3]
+        - [stop_position, np.float32, 3]
+        - [parent, np.int32, 1]
+        - [flag, np.int32, 1]
+      trigger:
+        - [time, np.float32, 1]
+        - [type, np.int32, 1]
+
+detector:
+  npmts: 10184
