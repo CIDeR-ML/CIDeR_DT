@@ -4,7 +4,6 @@ import numpy as np
 
 ROOT.gSystem.Load(os.environ['WCSIMDIR'] + "/lib/libWCSimRoot.so")
 
-
 class WCSim:
     def __init__(self, tree):
         self.tree = tree

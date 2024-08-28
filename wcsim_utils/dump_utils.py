@@ -15,7 +15,7 @@ from datetime import datetime
 from cachetools import cached, LRUCache
 from .root_utils import WCSim
 #from memory_profiler import profile
-from line_profiler import profile
+#from line_profiler import profile
 
 ROOT.gROOT.SetBatch(True)
 cache = LRUCache(maxsize=100)
@@ -54,6 +54,9 @@ class WCSimRead(WCSim):
         self.dset = {}
         self.chain = None
 
+        self.track_filled = False
+        self.trigger_filled = False
+        
         self.read_root_files()
         self.initialized = False
 
@@ -90,25 +93,27 @@ class WCSimRead(WCSim):
     def get_hit_photons(self, ev):
         self.get_event(ev)
         for value in self.cfg['data']['root_branches']['hit_photons']:
-            self.root_inputs['true_'+value[0]].begin_list()
+            if value[0] != 'PE':
+                self.root_inputs['true_'+value[0]].begin_list()
         for t in range(self.ntrigger):
             self.get_trigger(t)
-            for h in self.trigger.GetCherenkovHitTimes():
+            for h in self.trigger.GetCherenkovHits():
                 self.root_inputs["true_PE"][ev][h.GetTubeID()-1] = h.GetTotalPe(1)
             # need to do the following because GetChrenkovHitTimes takes a long time
             photons = self.trigger.GetCherenkovHitTimes()
             for it in range(photons.GetEntries()):
                 p = photons[it]
-                self.root_inputs['true_end_time'].float(p.GetTruetime())
+                self.root_inputs['true_end_time'].real(p.GetTruetime())
                 self.root_inputs['true_track'].integer(p.GetParentID())
                 try:  # Only works with new tracking branch of WCSim
-                    self.root_inputs['true_start_time'].float(p.GetPhotonStartTime())
+                    self.root_inputs['true_start_time'].real(p.GetPhotonStartTime())
                     self.root_inputs['true_start_position'].append([p.GetPhotonStartPos(i) / 10 for i in range(3)])
                     self.root_inputs['true_end_position'].append([p.GetPhotonEndPos(i) / 10 for i in range(3)])
                 except AttributeError:  # leave as zeros if not using tracking branch
                     pass
         for value in self.cfg['data']['root_branches']['hit_photons']:
-            self.root_inputs['true_'+value[0]].end_list()
+            if value[0] != 'PE':
+                self.root_inputs['true_'+value[0]].end_list()
 
     @cached(cache)
     def get_tracks(self, ev):
@@ -117,15 +122,16 @@ class WCSimRead(WCSim):
             self.root_inputs['track_'+value[0]].begin_list()
         for t in range(self.ntrigger):
             self.get_trigger(t)
-            for track in self.trigger.GetTracks():
+            for track in self.trigger.GetTracks():                
                 self.root_inputs['track_id'].integer(track.GetId())
                 self.root_inputs['track_pid'].integer(track.GetIpnu())
-                self.root_inputs['track_start_time'].float(track.GetTime())
-                self.root_inputs['track_energy'].float(track.GetE())
+                self.root_inputs['track_start_time'].real(track.GetTime())
+                self.root_inputs['track_energy'].real(track.GetE())
                 self.root_inputs['track_start_position'].append([track.GetStart(i) for i in range(3)])
                 self.root_inputs['track_stop_position'].append([track.GetStop(i) for i in range(3)])
                 self.root_inputs['track_parent'].integer(track.GetParenttype())
                 self.root_inputs['track_flag'].integer(track.GetFlag())
+                self.track_filled = True
         for value in self.cfg['data']['root_branches']['tracks']:
             self.root_inputs['track_'+value[0]].end_list()
 
@@ -136,11 +142,12 @@ class WCSimRead(WCSim):
             self.root_inputs['trigger_'+value[0]].begin_list()
         for t in range(self.ntrigger):
             self.get_trigger(t)
-            self.root_inputs['trigger_time'].float(self.trigger.GetHeader().GetDate())
+            self.root_inputs['trigger_time'].real(self.trigger.GetHeader().GetDate())
             trig_type = self.trigger.GetTriggerType()
             if trig_type > np.iinfo(np.int32).max:
                 trig_type = -1
             self.root_inputs['trigger_type'].integer(trig_type)
+            self.trigger_filled = True
         for value in self.cfg['data']['root_branches']['trigger']:
             self.root_inputs['trigger_'+value[0]].end_list()
 
@@ -154,7 +161,10 @@ class WCSimRead(WCSim):
 
         if self.write_hit_photons:
             for value in self.cfg['data']['root_branches']['hit_photons']:
-                self.root_inputs['true_'+value[0]]  = ak.ArrayBuilder()
+                if value[0] == "PE":
+                    self.root_inputs['true_'+value[0]] = np.empty((self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
+                else:
+                    self.root_inputs['true_'+value[0]]  = ak.ArrayBuilder()
 
         if self.write_digi_hits:
             for value in self.cfg['data']['root_branches']['digi_hits']:
@@ -187,10 +197,6 @@ class WCSimRead(WCSim):
             for value in self.cfg['data']['root_branches']['digi_hits']:
                 self.dset['digi_'+value[0]]    = self.fh5.create_dataset('digi_'+value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]), compression=self.cmprs, compression_opts=self.cmprs_opt)
 
-    @cached(cache)
-    def fill_h5_dset(self, arr: np.array, prefix: str, value:str):
-        self.dset[prefix + value] = self.fh5.create_dataset(prefix + value, data=arr, compression=self.cmprs, compression_opts=self.cmprs_opt)
-
     def dump_array(self):
         if not self.initialized:
             self.initialize_array()
@@ -211,7 +217,7 @@ class WCSimRead(WCSim):
                 self.get_digitized_hits(ev)
 
             if self.write_tracks:
-                self.get_tracks(ev,)
+                self.get_tracks(ev)
 
             if self.write_trigger:
                 self.get_triggers(ev)
@@ -219,7 +225,7 @@ class WCSimRead(WCSim):
             self.root_inputs['event_ids'][ev] = ev
             self.root_inputs['root_file'][ev] = self.wcsim[int(ev/self.nevents_per_file)]
 
-    @profile
+    #@profile
     def dump_to_h5(self):
         # labels -> pid
         # veto   -> trigger type
@@ -234,33 +240,35 @@ class WCSimRead(WCSim):
         if self.write_hit_photons:
             for value in self.cfg['data']['root_branches']['hit_photons']:
                 if value[0] == 'PE':
-                    self.fill_h5_dset(self.root_inputs['true_'+value[0]], 'true_', value[0])
+                    self.dset['true_PE'] = self.fh5.create_dataset('true_PE', data = self.root_inputs['true_PE'])
                 else:
                     arr_fill = self.root_inputs['true_'+value[0]].snapshot()
                     padded = ak.pad_none(arr_fill, target=ak.max(ak.num(arr_fill, axis=1)), axis=1)
                     filled = ak.fill_none(padded, -999)
                     np_filled = ak.to_numpy(filled)
-                    self.fill_h5_dset(np_filled, 'true_', value[0])
+                    self.dset['true_'+value[0]] = self.fh5.create_dataset('true_'+value[0], data = np_filled.copy())
 
         if self.write_digi_hits:
             for value in self.cfg['data']['root_branches']['digi_hits']:
                 self.dset['digi_'+value[0]][:] = self.root_inputs['digi_'+value[0]]
 
-        if self.write_tracks:
+        if self.write_tracks and self.track_filled:
             for value in self.cfg['data']['root_branches']['tracks']:
                 arr_fill = self.root_inputs['track_'+value[0]].snapshot()
                 padded = ak.pad_none(arr_fill, target=ak.max(ak.num(arr_fill, axis=1)), axis=1)
                 filled = ak.fill_none(padded, -999)
-                np_filled = ak.to_numpy(filled)
-                self.fill_h5_dset(np_filled, 'track_', value[0])
+                np_filled = ak.to_numpy(filled)                
+                self.dset['track_'+value[0]] = self.fh5.create_dataset('track_'+value[0], data = np_filled.copy())
+                    
 
-        if self.write_trigger:
+        if self.write_trigger and self.trigger_filled:
             for value in self.cfg['data']['root_branches']['trigger']:
                 arr_fill = self.root_inputs['trigger_'+value[0]].snapshot()
                 padded = ak.pad_none(arr_fill, target=ak.max(ak.num(arr_fill, axis=1)), axis=1)
                 filled = ak.fill_none(padded, -999)
                 np_filled = ak.to_numpy(filled)
-                self.fill_h5_dset(np_filled, 'trigger_', value[0])
+                self.dset['trigger_'+value[0]] = self.fh5.create_dataset('trigger_'+value[0], data = np_filled.copy())
+                    
                 
         self.fh5.close()
         print("Written to h5 file!") 
