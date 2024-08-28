@@ -14,6 +14,8 @@ import os
 from datetime import datetime
 from cachetools import cached, LRUCache
 from .root_utils import WCSim
+#from memory_profiler import profile
+from line_profiler import profile
 
 ROOT.gROOT.SetBatch(True)
 cache = LRUCache(maxsize=100)
@@ -34,6 +36,9 @@ class WCSimRead(WCSim):
         self.outfile = cfg['data']['output_file']
         self.nevents_per_file = cfg['data']['nevents_per_file']
         self.npmts = cfg['detector']['npmts']
+
+        self.cmprs = cfg['format'].get('compression', 'gzip')
+        self.cmprs_opt = cfg['format'].get('compression_opt', 5)
 
         self.write_event_info = 'event_info' in cfg['data']['root_branches']
         self.write_hit_photons = 'hit_photons' in cfg['data']['root_branches']
@@ -170,35 +175,21 @@ class WCSimRead(WCSim):
         self.fh5 = h5py.File(self.outfile, 'w')
         self.fh5.attrs['timestamp'] = str(datetime.now())
 
-        #self.dset['labels']     = self.fh5.create_dataset("labels", shape=(self.nevents,) dtype=np.int32)
-        self.dset['PATHS']      = self.fh5.create_dataset("root_files", shape=(self.nevents,),dtype=h5py.special_dtype(vlen=str))
-        self.dset['event_ids']  = self.fh5.create_dataset("event_ids", shape=(self.nevents, ), dtype=np.int32)
+        self.dset['PATHS']      = self.fh5.create_dataset("root_files", shape=(self.nevents,),dtype=h5py.special_dtype(vlen=str), compression=self.cmprs, compression_opts=self.cmprs_opt)
+        self.dset['event_ids']  = self.fh5.create_dataset("event_ids", shape=(self.nevents, ), dtype=np.int16, compression=self.cmprs, compression_opts=self.cmprs_opt)
+        
         if self.write_event_info:
             for value in self.cfg['data']['root_branches']['event_info']:
-                self.dset[value[0]]            = self.fh5.create_dataset(value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
+                self.dset[value[0]]            = self.fh5.create_dataset(value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]), compression=self.cmprs, compression_opts=self.cmprs_opt)
 
-        #if write_hit_photons:
-        #    for value in self.cfg['data']['root_branches']['hit_photons']:
-        #        self.dset['true_'+value[0]]    = self.fh5.create_dataset('true_'+value[0], shape=(self.nevents,), maxshape=(self.nevents, None), dtype=dtype_map.get(value[1]))
 
         if self.write_digi_hits:
             for value in self.cfg['data']['root_branches']['digi_hits']:
-                self.dset['digi_'+value[0]]    = self.fh5.create_dataset('digi_'+value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
-
-        #if write_tracks:
-        #    for value in self.cfg['data']['root_branches']['tracks']:
-        #        self.dset['track_'+value[0]]   = self.fh5.create_dataset('track_'+value[0], shape=(self.nevents,), maxshape=(self.nevents, None), dtype=dtype_map.get(value[1]))
-
-        #if write_trigger:
-        #    for value in self.cfg['data']['root_branches']['trigger']:
-        #        self.dset['trigger_'+value[0]] = self.fh5.create_dataset('trigger_'+value[0], shape=(self.nevents,), maxshape=(self.nevents, None), dtype=dtype_map.get(value[1]))
-
-        #self.dset['veto']       = self.fh5.create_dataset("veto",shape=(self.nevents,),dtype=np.bool_)
-        #self.dset['veto2']      = self.fh5.create_dataset("veto2",shape=(self.nevents,),dtype=np.bool_)
+                self.dset['digi_'+value[0]]    = self.fh5.create_dataset('digi_'+value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]), compression=self.cmprs, compression_opts=self.cmprs_opt)
 
     @cached(cache)
     def fill_h5_dset(self, arr: np.array, prefix: str, value:str):
-        self.dset[prefix + value] = self.fh5.create_dataset(prefix + value, data=arr)
+        self.dset[prefix + value] = self.fh5.create_dataset(prefix + value, data=arr, compression=self.cmprs, compression_opts=self.cmprs_opt)
 
     def dump_array(self):
         if not self.initialized:
@@ -228,6 +219,7 @@ class WCSimRead(WCSim):
             self.root_inputs['event_ids'][ev] = ev
             self.root_inputs['root_file'][ev] = self.wcsim[int(ev/self.nevents_per_file)]
 
+    @profile
     def dump_to_h5(self):
         # labels -> pid
         # veto   -> trigger type

@@ -38,3 +38,7 @@ data:
 
 detector:
   npmts: 10184
+  
+format:
+  compression: gzip
+  compression_opt: 5
