@@ -9,8 +9,11 @@ import awkward as ak
 import h5py
 import glob
 import ROOT
+import os
 
+from datetime import datetime
 from cachetools import cached, LRUCache
+from .root_utils import WCSim
 
 ROOT.gROOT.SetBatch(True)
 cache = LRUCache(maxsize=100)
@@ -24,11 +27,12 @@ dtype_map = {
     'np.uint8': np.uint8,
 }
 
-class WCSimRead():
+class WCSimRead(WCSim):
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self.file_name = cfg['data']['file_name']
         self.outfile = cfg['data']['output_file']
+        self.nevents_per_file = cfg['data']['nevents_per_file']
         self.npmts = cfg['detector']['npmts']
 
         self.write_event_info = 'event_info' in cfg['data']['root_branches']
@@ -49,11 +53,10 @@ class WCSimRead():
         self.initialized = False
 
     def read_root_files(self):
-        from . import WCSim
-        self.chain = ROOT.TChain("wcsimT")
+        self.chain = ROOT.TChain("wcsimT")        
         for infile in self.infiles:
             try:
-                if not os.path.exists(file):
+                if not os.path.exists(infile):
                     raise FileNotFoundError(f"{infile} not found. Skipping.")
                 self.chain.Add(infile)
                 self.wcsim.append(infile)
@@ -61,23 +64,16 @@ class WCSimRead():
             except FileNotFoundError as e:
                 print(e)
         super().__init__(self.chain)
-        self.nevents += self.chain.nevent
     
     def get_nevents(self):
         return self.nevents
-    
-    @cached(cache)
-    def get_event(self, i):
-        file_index = int(i/len(self.wcsim))
-        self.chain.get_event(i)
-        return file_index
 
     @cached(cache)
     def get_digitized_hits(self, ev):
-        self.chain.get_event(ev)
-        for t in range(self.chain.ntrigger):
-            self.chain.get_trigger(t)
-            for hit in self.chain.trigger.GetCherenkovDigiHits():
+        self.get_event(ev)
+        for t in range(self.ntrigger):
+            self.get_trigger(t)
+            for hit in self.trigger.GetCherenkovDigiHits():
                 pmt_id = hit.GetTubeId() - 1
 
                 self.root_inputs["digi_pmt"][ev][pmt_id] = 1
@@ -87,12 +83,12 @@ class WCSimRead():
 
     @cached(cache)
     def get_hit_photons(self, ev):
-        self.chain.get_event(ev)
+        self.get_event(ev)
         for value in self.cfg['data']['root_branches']['hit_photons']:
             self.root_inputs['true_'+value[0]].begin_list()
-        for t in range(self.chain.ntrigger):
-            self.chain.get_trigger(t)
-            for h in self.chain.trigger.GetCherenkovHitTimes():
+        for t in range(self.ntrigger):
+            self.get_trigger(t)
+            for h in self.trigger.GetCherenkovHitTimes():
                 self.root_inputs["true_PE"][ev][h.GetTubeID()-1] = h.GetTotalPe(1)
             # need to do the following because GetChrenkovHitTimes takes a long time
             photons = self.trigger.GetCherenkovHitTimes()
@@ -111,11 +107,11 @@ class WCSimRead():
 
     @cached(cache)
     def get_tracks(self, ev):
-        self.chain.get_event(ev)
+        self.get_event(ev)
         for value in self.cfg['data']['root_branches']['tracks']:
             self.root_inputs['track_'+value[0]].begin_list()
-        for t in range(self.chain.ntrigger):
-            self.chain.get_trigger(t)
+        for t in range(self.ntrigger):
+            self.get_trigger(t)
             for track in self.trigger.GetTracks():
                 self.root_inputs['track_id'].integer(track.GetId())
                 self.root_inputs['track_pid'].integer(track.GetIpnu())
@@ -123,20 +119,20 @@ class WCSimRead():
                 self.root_inputs['track_energy'].float(track.GetE())
                 self.root_inputs['track_start_position'].append([track.GetStart(i) for i in range(3)])
                 self.root_inputs['track_stop_position'].append([track.GetStop(i) for i in range(3)])
-                self.root_inputs['track_parent']integer(track.GetParenttype())
+                self.root_inputs['track_parent'].integer(track.GetParenttype())
                 self.root_inputs['track_flag'].integer(track.GetFlag())
         for value in self.cfg['data']['root_branches']['tracks']:
             self.root_inputs['track_'+value[0]].end_list()
 
     @cached(cache)
     def get_triggers(self, ev):
-        self.chain.get_event(ev)
+        self.get_event(ev)
         for value in self.cfg['data']['root_branches']['trigger']:
             self.root_inputs['trigger_'+value[0]].begin_list()
-        for t in range(self.chain.ntrigger):
-            self.chain.get_trigger(t)
-            self.root_inputs['trigger_time'].float(self.chain.trigger.GetHeader().GetDate())
-            trig_type = self.chain.trigger.GetTriggerType()
+        for t in range(self.ntrigger):
+            self.get_trigger(t)
+            self.root_inputs['trigger_time'].float(self.trigger.GetHeader().GetDate())
+            trig_type = self.trigger.GetTriggerType()
             if trig_type > np.iinfo(np.int32).max:
                 trig_type = -1
             self.root_inputs['trigger_type'].integer(trig_type)
@@ -144,7 +140,7 @@ class WCSimRead():
             self.root_inputs['trigger_'+value[0]].end_list()
 
     def initialize_array(self):
-        self.root_inputs["event_id"]   = np.empty(self.nevents, dtype=np.int32)
+        self.root_inputs["event_ids"]   = np.empty(self.nevents, dtype=np.int32)
         self.root_inputs["root_file"]  = np.empty(self.nevents, dtype=object)
 
         if self.write_event_info:
@@ -169,12 +165,14 @@ class WCSimRead():
 
     def create_h5(self):
         print("ouput file:", self.outfile)
+        if os.path.exists(self.outfile):
+            os.remove(self.outfile)
         self.fh5 = h5py.File(self.outfile, 'w')
         self.fh5.attrs['timestamp'] = str(datetime.now())
 
         #self.dset['labels']     = self.fh5.create_dataset("labels", shape=(self.nevents,) dtype=np.int32)
-        self.dset['PATHS']      = self.fh5.create_dataset("root_files", shape=(self.nevents, 1),dtype=h5py.special_dtype(vlen=str))
-        self.dset['event_ids']  = self.fh5.create_dataset("event_ids", shape=(self.nevents, 1), dtype=np.int32)
+        self.dset['PATHS']      = self.fh5.create_dataset("root_files", shape=(self.nevents,),dtype=h5py.special_dtype(vlen=str))
+        self.dset['event_ids']  = self.fh5.create_dataset("event_ids", shape=(self.nevents, ), dtype=np.int32)
         if self.write_event_info:
             for value in self.cfg['data']['root_branches']['event_info']:
                 self.dset[value[0]]            = self.fh5.create_dataset(value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
@@ -183,7 +181,7 @@ class WCSimRead():
         #    for value in self.cfg['data']['root_branches']['hit_photons']:
         #        self.dset['true_'+value[0]]    = self.fh5.create_dataset('true_'+value[0], shape=(self.nevents,), maxshape=(self.nevents, None), dtype=dtype_map.get(value[1]))
 
-        if write_digi_hits:
+        if self.write_digi_hits:
             for value in self.cfg['data']['root_branches']['digi_hits']:
                 self.dset['digi_'+value[0]]    = self.fh5.create_dataset('digi_'+value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
 
@@ -209,10 +207,9 @@ class WCSimRead():
             self.initilized = True
 
         for ev in range(self.nevents):
-            fidx = self.get_event(ev)
-
+            
             if self.write_event_info:
-                self.event_info = self.chain.get_event_info()
+                self.event_info = self.get_event_info()
                 for value in self.cfg['data']['root_branches']['event_info']:
                     self.root_inputs[value[0]][ev] = self.event_info[value[0]]
 
@@ -228,15 +225,15 @@ class WCSimRead():
             if self.write_trigger:
                 self.get_triggers(ev)
 
-            self.root_inputs['event_id'][ev] = ev
-            self.root_inputs['root_file'][ev] = self.wcsim[fidx]
+            self.root_inputs['event_ids'][ev] = ev
+            self.root_inputs['root_file'][ev] = self.wcsim[int(ev/self.nevents_per_file)]
 
     def dump_to_h5(self):
         # labels -> pid
         # veto   -> trigger type
         # veto2  -> trigger time
         self.dset['PATHS'][:]       = self.root_inputs['root_file']
-        self.dset['event_id'][:]    = self.root_inputs['event_id']
+        self.dset['event_ids'][:]    = self.root_inputs['event_ids']
 
         if self.write_event_info:
             for value in self.cfg['data']['root_branches']['event_info']:
@@ -272,5 +269,6 @@ class WCSimRead():
                 filled = ak.fill_none(padded, -999)
                 np_filled = ak.to_numpy(filled)
                 self.fill_h5_dset(np_filled, 'trigger_', value[0])
-
+                
         self.fh5.close()
+        print("Written to h5 file!") 

@@ -7,13 +7,9 @@ ROOT.gSystem.Load(os.environ['WCSIMDIR'] + "/lib/libWCSimRoot.so")
 
 class WCSim:
     def __init__(self, tree):
-        print("number of entries in the geometry tree: " + str(self.geotree.GetEntries()))
-        self.geotree.GetEntry(0)
-        self.geo = self.geotree.wcsimrootgeom
-        self.num_pmts = self.geo.GetWCNumPMT()
         self.tree = tree
-        self.nevent = self.tree.GetEntries()
-        print("number of entries in the tree: " + str(self.nevent))
+        self.nevents = self.tree.GetEntries()
+        print("number of entries in the tree: " + str(self.nevents))
         # Get first event and trigger to prevent segfault when later deleting trigger to prevent memory leak
         self.tree.GetEvent(0)
         self.current_event = 0
@@ -95,42 +91,7 @@ class WCSim:
             "direction": [p / norm for p in momentum],  # direction of sum of momenta
             "energy": sum(p.GetE() for p in particles)  # sum of energies
         }
-    def get_true_hits(self):
-        position = []
-        track = []
-        pmt = []
-        PE = []
-        trigger = []
-        for t in range(self.ntrigger):
-            self.get_trigger(t)
-            for hit in self.trigger.GetCherenkovHits():
-                pmt_id = hit.GetTubeID() - 1
-                tracks = set()
-                for j in range(hit.GetTotalPe(0), hit.GetTotalPe(0)+hit.GetTotalPe(1)):
-                    pe = self.trigger.GetCherenkovHitTimes().At(j)
-                    tracks.add(pe.GetParentID())
-                position.append([self.geo.GetPMT(pmt_id).GetPosition(k) for k in range(3)])
-                track.append(tracks.pop() if len(tracks) == 1 else -2)
-                pmt.append(pmt_id)
-                PE.append(hit.GetTotalPe(1))
-                trigger.append(t)
-        hits = {
-            "position": np.asarray(position, dtype=np.float32),
-            "track": np.asarray(track, dtype=np.int32),
-            "pmt": np.asarray(pmt, dtype=np.int32),
-            "PE": np.asarray(PE, dtype=np.int32),
-            "trigger": np.asarray(trigger, dtype=np.int32)
-        }
-        return hits
 
-class WCSimChain(WCSim):
-    def __init__(self, filenames):
-        self.chain = ROOT.TChain("wcsimT")
-        for file in filenames:
-            self.chain.Add(file)
-        self.file = self.GetFile()
-        self.geotree = self.file.Get("wcsimGeoT")
-        super().__init__(self.chain)
 
 def get_label(infile):
     if "_gamma" in infile:
