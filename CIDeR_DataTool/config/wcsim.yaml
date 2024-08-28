@@ -12,28 +12,28 @@ data:
         - [energy, np.float32, 1]
       hit_photons:
         - [PE, np.int32, 10184]
-        - [end_time, np.float32, 1]
-        - [end_position, np.float32, 3]
-        - [start_time, np.float32, 1]
-        - [start_position, np.float32, 3]
-        - [track, np.int32, 1]
+        - [end_time, np.float32, '']
+        - [end_position, np.float32, '']
+        - [start_time, np.float32, '']
+        - [start_position, np.float32, '']
+        - [track, np.int32, '']
       digi_hits:
         - [pmt, np.int32, 10184] # pmt id
         - [charge, np.float32, 10184]
         - [time, np.float32, 10184]
         - [trigger, np.int32, 10184] # pmt trigger id
       tracks:
-        - [id, np,int32, 1]
-        - [pid, np.int32, 1]
-        - [start_time, np.float32, 1]
-        - [energy, np.float32, 1]
-        - [start_position, np.float32, 3]
-        - [stop_position, np.float32, 3]
-        - [parent, np.int32, 1]
-        - [flag, np.int32, 1]
+        - [id, np,int32, '']
+        - [pid, np.int32, '']
+        - [start_time, np.float32, '']
+        - [energy, np.float32, '']
+        - [start_position, np.float32, '']
+        - [stop_position, np.float32, '']
+        - [parent, np.int32, '']
+        - [flag, np.int32, '']
       trigger:
-        - [time, np.float32, 1]
-        - [type, np.int32, 1]
+        - [time, np.float32, '']
+        - [type, np.int32, '']
 
 detector:
   npmts: 10184

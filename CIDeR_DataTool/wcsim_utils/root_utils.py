@@ -122,18 +122,6 @@ class WCSim:
             "trigger": np.asarray(trigger, dtype=np.int32)
         }
         return hits
-    
-class WCSimFile(WCSim):
-    def __init__(self, filename):
-        self.file = ROOT.TFile(filename, "read")
-        tree = self.file.Get("wcsimT")
-        self.geotree = self.file.Get("wcsimGeoT")
-        super().__init__(tree)
-
-    #def __del__(self):
-    #    if self.file is not None:
-    #        self.file.Close()
-
 
 class WCSimChain(WCSim):
     def __init__(self, filenames):
