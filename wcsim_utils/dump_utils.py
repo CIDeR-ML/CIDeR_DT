@@ -259,7 +259,6 @@ class WCSimRead(WCSim):
                 filled = ak.fill_none(padded, -999)
                 np_filled = ak.to_numpy(filled)                
                 self.dset['track_'+value[0]] = self.fh5.create_dataset('track_'+value[0], data = np_filled.copy())
-                    
 
         if self.write_trigger and self.trigger_filled:
             for value in self.cfg['data']['root_branches']['trigger']:

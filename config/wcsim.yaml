@@ -9,7 +9,7 @@ data:
       event_info:
         - [pid, np.int32, 1]
         - [position, np.float32, 3]
-        - [direction, np.float32, 3]
+        - [direction, np.float32, 2]
         - [energy, np.float32, 1]
       hit_photons:
         - [PE, np.int32, 10184]

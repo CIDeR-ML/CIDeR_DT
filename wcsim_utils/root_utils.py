@@ -1,3 +1,6 @@
+'''
+Transcribed from root_file_utils.py from watchmal DataTool
+'''
 import ROOT
 import os
 import numpy as np
@@ -54,8 +57,8 @@ class WCSim:
             # Only one primary, this is the particle being simulated
             return {
                 "pid": particles[0].GetIpnu(),
-                "position": [particles[0].GetStart(i) for i in range(3)],
-                "direction": [particles[0].GetDir(i) for i in range(3)],
+                "position": np.transpose([particles[0].GetStart(i)*(-1)**i for i in range(3)], [0, 2, 1]), # rotation of axes in wcte,
+                "direction": [np.acos(particles[0].GetDir(0)/(particles[0].GetDir(0)**2+particles[0].GetDir(2)**2)**0.5),  np.acos(-particles[0].GetDir(1)/(np.sum([particles[0].GetDir(i)**2 for i in range(2)]))**0.5)], # phi, theta
                 "energy": particles[0].GetE()
             }
         # Particle with flag -1 is the incoming neutrino or 'dummy neutrino' used for gamma
@@ -66,8 +69,8 @@ class WCSim:
         if isConversion and len(neutrino) == 1 and neutrino[0].GetIpnu() == 22:
             return {
                 "pid": 22,
-                "position": [particles[0].GetStart(i) for i in range(3)], # e+ / e- should have same position
-                "direction": [neutrino[0].GetDir(i) for i in range(3)],
+                "position": np.transpose([particles[0].GetStart(i)*(-1)**i for i in range(3)], [0, 2, 1]), # rotation of axes in wcte
+                "direction": [np.acos(neutrino[0].GetDir(0)/(neutrino[0].GetDir(0)**2+neutrino[0].GetDir(2)**2)**0.5),  np.acos(-neutrino[0].GetDir(1)/(np.sum([neutrino[0].GetDir(i)**2 for i in range(2)]))**0.5)], # phi, theta
                 "energy": neutrino[0].GetE()
             }
         # Check for dummy neutrino from old gamma simulations that didn't save the gamma info
@@ -83,11 +86,10 @@ class WCSim:
             }
         # Otherwise something else is going on... guess info from the primaries
         momentum = [sum(p.GetDir(i) * p.GetP() for p in particles) for i in range(3)]
-        norm = np.sqrt(sum(p ** 2 for p in momentum))
         return {
             "pid": 0,  # there's more than one particle so just use pid 0
             "position": [sum(p.GetStart(i) for p in particles)/len(particles) for i in range(3)],  # average position
-            "direction": [p / norm for p in momentum],  # direction of sum of momenta
+            "direction": [np.acos(momentum[0].GetDir(0)/(momentum[0].GetDir(0)**2+momentum[0].GetDir(2)**2)**0.5),  np.acos(-momentum[0].GetDir(1)/(np.sum([momentum[0].GetDir(i)**2 for i in range(2)]))**0.5)]
             "energy": sum(p.GetE() for p in particles)  # sum of energies
         }
 
