@@ -174,7 +174,7 @@ class WCSimRead(WCSim):
         if self.write_digi_hits:
             for value in self.cfg['data']['root_branches']['digi_hits']:
                 #self.root_inputs['digi_'+value[0]]  = np.empty((self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]))
-                self.root_inputs['track_'+value[0]] = ak.ArrayBuilder()
+                self.root_inputs['digi_'+value[0]] = ak.ArrayBuilder()
 
         if self.write_tracks:
             for value in self.cfg['data']['root_branches']['tracks']:
