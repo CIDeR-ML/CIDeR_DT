@@ -78,16 +78,21 @@ class WCSimRead(WCSim):
 
     @cached(cache)
     def get_digitized_hits(self, ev):
+        for value in self.cfg['data']['root_branches']['digi_hits']:
+            self.root_inputs['digi_' + value[0]].begin_list()
         self.get_event(ev)
         for t in range(self.ntrigger):
             self.get_trigger(t)
             for hit in self.trigger.GetCherenkovDigiHits():
                 pmt_id = hit.GetTubeId() - 1
 
-                self.root_inputs["digi_pmt"][ev][pmt_id] = 1
-                self.root_inputs["digi_charge"][ev][pmt_id] = hit.GetQ()
-                self.root_inputs["digi_time"][ev][pmt_id] = hit.GetT()
-                self.root_inputs["digi_trigger"][ev][pmt_id] = t
+                self.root_inputs['digi_pmt'][ev].integer(pmt_id)
+                self.root_inputs['digi_charge'][ev].real(hit.GetQ())
+                self.root_inputs['digi_time'][ev].real(hit.GetT())
+                self.root_inputs['digi_trigger'][ev].integer(t)
+
+        for value in self.cfg['data']['root_branches']['digi_hits']:
+            self.root_inputs['digi_' + value[0]].end_list()
 
     @cached(cache)
     def get_hit_photons(self, ev):
@@ -192,10 +197,9 @@ class WCSimRead(WCSim):
             for value in self.cfg['data']['root_branches']['event_info']:
                 self.dset[value[0]]            = self.fh5.create_dataset(value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]), compression=self.cmprs, compression_opts=self.cmprs_opt)
 
-
-        if self.write_digi_hits:
-            for value in self.cfg['data']['root_branches']['digi_hits']:
-                self.dset['digi_'+value[0]]    = self.fh5.create_dataset('digi_'+value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]), compression=self.cmprs, compression_opts=self.cmprs_opt)
+        #if self.write_digi_hits:
+        #    for value in self.cfg['data']['root_branches']['digi_hits']:
+        #        self.dset['digi_'+value[0]]    = self.fh5.create_dataset('digi_'+value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]), compression=self.cmprs, compression_opts=self.cmprs_opt)
 
     def dump_array(self):
         if not self.initialized:
@@ -250,7 +254,11 @@ class WCSimRead(WCSim):
 
         if self.write_digi_hits:
             for value in self.cfg['data']['root_branches']['digi_hits']:
-                self.dset['digi_'+value[0]][:] = self.root_inputs['digi_'+value[0]]
+                arr_fill = self.root_inputs['digi_' + value[0]].snapshot()
+                padded = ak.pad_none(arr_fill, target=ak.max(ak.num(arr_fill, axis=1)), axis=1)
+                filled = ak.fill_none(padded, -999)
+                np_filled = ak.to_numpy(filled)
+                self.dset['digi_' + value[0]] = self.fh5.create_dataset('digi_' + value[0], data=np_filled.copy())
 
         if self.write_tracks and self.track_filled:
             for value in self.cfg['data']['root_branches']['tracks']:
