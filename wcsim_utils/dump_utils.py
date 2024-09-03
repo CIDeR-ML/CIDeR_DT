@@ -48,30 +48,28 @@ class WCSimRead(WCSim):
 
         self.infiles = glob.glob(self.file_name)
         self.wcsim = [] # list of WCSim file names
-        self.chain = None
+        #self.chain = None
         self.nevents = 0
         self.root_inputs = {}
         self.dset = {}
-        self.chain = None
 
         self.track_filled = False
         self.trigger_filled = False
         
-        self.read_root_files()
         self.initialized = False
 
     def read_root_files(self):
-        self.chain = ROOT.TChain("wcsimT")        
+        chain = ROOT.TChain("wcsimT")
         for infile in self.infiles:
             try:
                 if not os.path.exists(infile):
                     raise FileNotFoundError(f"{infile} not found. Skipping.")
-                self.chain.Add(infile)
+                chain.Add(infile)
                 self.wcsim.append(infile)
                 print("Added", infile, "to chain")
             except FileNotFoundError as e:
                 print(e)
-        super().__init__(self.chain)
+        super().__init__(chain)
     
     def get_nevents(self):
         return self.nevents
@@ -86,10 +84,10 @@ class WCSimRead(WCSim):
             for hit in self.trigger.GetCherenkovDigiHits():
                 pmt_id = hit.GetTubeId() - 1
 
-                self.root_inputs['digi_pmt'][ev].integer(pmt_id)
-                self.root_inputs['digi_charge'][ev].real(hit.GetQ())
-                self.root_inputs['digi_time'][ev].real(hit.GetT())
-                self.root_inputs['digi_trigger'][ev].integer(t)
+                self.root_inputs['digi_pmt'].integer(pmt_id)
+                self.root_inputs['digi_charge'].real(hit.GetQ())
+                self.root_inputs['digi_time'].real(hit.GetT())
+                self.root_inputs['digi_trigger'].integer(t)
 
         for value in self.cfg['data']['root_branches']['digi_hits']:
             self.root_inputs['digi_' + value[0]].end_list()
@@ -257,8 +255,9 @@ class WCSimRead(WCSim):
             for value in self.cfg['data']['root_branches']['digi_hits']:
                 arr_fill = self.root_inputs['digi_' + value[0]].snapshot()
                 padded = ak.pad_none(arr_fill, target=ak.max(ak.num(arr_fill, axis=1)), axis=1)
-                filled = ak.fill_none(padded, -999)
-                np_filled = ak.to_numpy(filled)
+                #filled = ak.fill_none(padded, -999)
+                np_filled = ak.to_numpy(padded)
+                print(np_filled.shape)
                 self.dset['digi_' + value[0]] = self.fh5.create_dataset('digi_' + value[0], data=np_filled.copy())
 
         if self.write_tracks and self.track_filled:
