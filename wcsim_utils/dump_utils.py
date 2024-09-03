@@ -26,6 +26,7 @@ dtype_map = {
     'np.float64': np.float64,
     'np.int64': np.int64,
     'np.int16': np.int16,
+    'np.uint16': np.uint16,    
     'np.uint8': np.uint8,
 }
 
@@ -196,10 +197,6 @@ class WCSimRead(WCSim):
             for value in self.cfg['data']['root_branches']['event_info']:
                 self.dset[value[0]]            = self.fh5.create_dataset(value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]), compression=self.cmprs, compression_opts=self.cmprs_opt)
 
-        #if self.write_digi_hits:
-        #    for value in self.cfg['data']['root_branches']['digi_hits']:
-        #        self.dset['digi_'+value[0]]    = self.fh5.create_dataset('digi_'+value[0], shape=(self.nevents, int(value[-1])), dtype=dtype_map.get(value[1]), compression=self.cmprs, compression_opts=self.cmprs_opt)
-
     def dump_array(self):
         if not self.initialized:
             self.initialize_array()
@@ -243,13 +240,13 @@ class WCSimRead(WCSim):
         if self.write_hit_photons:
             for value in self.cfg['data']['root_branches']['hit_photons']:
                 if value[0] == 'PE':
-                    self.dset['true_PE'] = self.fh5.create_dataset('true_PE', data = self.root_inputs['true_PE'])
+                    self.dset['true_PE'] = self.fh5.create_dataset('true_PE', data = self.root_inputs['true_PE'], compression=self.cmprs, compression_opts=self.cmprs_opt)
                 else:
                     arr_fill = self.root_inputs['true_'+value[0]].snapshot()
                     padded = ak.pad_none(arr_fill, target=ak.max(ak.num(arr_fill, axis=1)), axis=1)
                     filled = ak.fill_none(padded, -999)
                     np_filled = ak.to_numpy(filled)
-                    self.dset['true_'+value[0]] = self.fh5.create_dataset('true_'+value[0], data = np_filled.copy())
+                    self.dset['true_'+value[0]] = self.fh5.create_dataset('true_'+value[0], data = np_filled.copy(), compression=self.cmprs, compression_opts=self.cmprs_opt)
 
         if self.write_digi_hits:
             for value in self.cfg['data']['root_branches']['digi_hits']:
@@ -257,8 +254,7 @@ class WCSimRead(WCSim):
                 padded = ak.pad_none(arr_fill, target=ak.max(ak.num(arr_fill, axis=1)), axis=1)
                 #filled = ak.fill_none(padded, -999)
                 np_filled = ak.to_numpy(padded)
-                print(np_filled.shape)
-                self.dset['digi_' + value[0]] = self.fh5.create_dataset('digi_' + value[0], data=np_filled.copy())
+                self.dset['digi_' + value[0]] = self.fh5.create_dataset('digi_' + value[0], data=np_filled.copy(), compression=self.cmprs, compression_opts=self.cmprs_opt)
 
         if self.write_tracks and self.track_filled:
             for value in self.cfg['data']['root_branches']['tracks']:
@@ -266,7 +262,7 @@ class WCSimRead(WCSim):
                 padded = ak.pad_none(arr_fill, target=ak.max(ak.num(arr_fill, axis=1)), axis=1)
                 filled = ak.fill_none(padded, -999)
                 np_filled = ak.to_numpy(filled)                
-                self.dset['track_'+value[0]] = self.fh5.create_dataset('track_'+value[0], data = np_filled.copy())
+                self.dset['track_'+value[0]] = self.fh5.create_dataset('track_'+value[0], data = np_filled.copy(), compression=self.cmprs, compression_opts=self.cmprs_opt)
                     
 
         if self.write_trigger and self.trigger_filled:
@@ -275,7 +271,7 @@ class WCSimRead(WCSim):
                 padded = ak.pad_none(arr_fill, target=ak.max(ak.num(arr_fill, axis=1)), axis=1)
                 filled = ak.fill_none(padded, -999)
                 np_filled = ak.to_numpy(filled)
-                self.dset['trigger_'+value[0]] = self.fh5.create_dataset('trigger_'+value[0], data = np_filled.copy())
+                self.dset['trigger_'+value[0]] = self.fh5.create_dataset('trigger_'+value[0], data = np_filled.copy(), compression=self.cmprs, compression_opts=self.cmprs_opt)
                     
                 
         self.fh5.close()
