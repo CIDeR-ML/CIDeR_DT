@@ -208,7 +208,7 @@ class wc_binning():
         #r_coords = [ self.r0_vox, self.r1_vox, self.r0_vox, self.r1_vox, self.r0_vox ]
 
         rows = self.rows[self.rows[:,0] % len(dirs) == 0]
-        vox = voxel[np.where(voxel[:,4]>=self.z0_vox-self.gap_space & voxel[:,5]<=self.z1_vox+self.gap_space)]
+        vox = voxel[np.where(np.logical_and(voxel[:,4]>=(self.z0_vox-self.gap_space), voxel[:,5]<=(self.z1_vox+self.gap_space)))]
 
         x_bin_coords = [[vox[i, 0] * np.cos(vox[i, 2] * np.pi / 180.), vox[i, 1] * np.cos(vox[i, 2] * np.pi / 180.),
                          vox[i, 1] * np.cos(vox[i, 3] * np.pi / 180.), vox[i, 0] * np.cos(vox[i, 3] * np.pi / 180.)] for i in range(len(vox))]
@@ -221,10 +221,9 @@ class wc_binning():
             x=x_coords,
             y=y_coords,
             z=z_coords,
-            fill='tonexty',
             mode='lines',
-            line=dict(color=rgba(232,232,232,0.5), width=1),
-            fillcolor=rgba(232, 232, 232, 0.5),
+            line=dict(color="rgba(232,232,232,0.5)", width=1),
+            #fillcolor="rgba(232, 232, 232, 0.5)",
         )
 
         trape_bins = go.Scatter3d(
