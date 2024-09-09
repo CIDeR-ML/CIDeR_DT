@@ -248,4 +248,5 @@ class wc_binning():
         fig.add_trace(points_bins)
 
         fig.show()
+        fig.write_image("test_rebin.png")
 
