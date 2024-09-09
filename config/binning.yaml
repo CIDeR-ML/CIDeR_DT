@@ -13,7 +13,7 @@ Data:
 Position:
   rmax: 200
   zmax: 180
-  gap_size: 5
+  gap_space: 5
   n_bins_phi0: 50
 
 Direction:
