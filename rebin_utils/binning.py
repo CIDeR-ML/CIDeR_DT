@@ -9,7 +9,6 @@ import math
 from datetime import datetime
 
 from wcprod.utils import voxels, directions
-from wcsim_utils.root_utils import rotate_wcte
 
 class wc_binning():
     def __init__(self, cfg=None, cfg_gen=None):
@@ -197,41 +196,62 @@ class wc_binning():
         self.fh5.close()
         print(f"Written to h5 file {self.outfile}.")
 
-    def visualize_bin_selection(self, voxel, dirs):
+    def visualize_bin_selection(self, pts, dirs):
         import plotly.graph_objects as go
         import numpy as np
         fig = go.Figure()
 
-        x_coords = [ self.r0_vox*np.cos(self.phi0_vox*np.pi/180.), self.r1_vox*np.cos(self.phi0_vox*np.pi/180.), self.r1_vox*np.cos(self.phi1_vox*np.pi/180.), self.r0_vox*np.cos(self.phi0_vox*np.pi/180.),  self.r0_vox*np.cos(self.phi0_vox*np.pi/180.) ]
-        y_coords = [ self.r0_vox*np.sin(self.phi0_vox*np.pi/180.), self.r1_vox*np.sin(self.phi0_vox*np.pi/180.), self.r1_vox*np.sin(self.phi1_vox*np.pi/180.), self.r0_vox*np.sin(self.phi0_vox*np.pi/180.),  self.r0_vox*np.sin(self.phi0_vox*np.pi/180.) ]
-        z_coords = [ self.z0_vox, self.z0_vox, self.z1_vox, self.z1_vox, self.z0_vox ]
-        #r_coords = [ self.r0_vox, self.r1_vox, self.r0_vox, self.r1_vox, self.r0_vox ]
+        x_coords = [ self.r0_vox*np.cos(self.phi0_vox*np.pi/180.), self.r1_vox*np.cos(self.phi0_vox*np.pi/180.),
+                     self.r1_vox*np.cos(self.phi1_vox*np.pi/180.), self.r0_vox*np.cos(self.phi1_vox*np.pi/180.),
+                     self.r0_vox*np.cos(self.phi0_vox*np.pi/180.), self.r0_vox*np.cos(self.phi0_vox*np.pi/180.),                                          
+                     self.r1_vox*np.cos(self.phi0_vox*np.pi/180.), self.r1_vox*np.cos(self.phi0_vox*np.pi/180.), 
+                     self.r1_vox*np.cos(self.phi0_vox*np.pi/180.), self.r1_vox*np.cos(self.phi1_vox*np.pi/180.),
+                     self.r1_vox*np.cos(self.phi1_vox*np.pi/180.), self.r1_vox*np.cos(self.phi1_vox*np.pi/180.),                     
+                     self.r1_vox*np.cos(self.phi1_vox*np.pi/180.), self.r1_vox*np.cos(self.phi1_vox*np.pi/180.),
+                     self.r0_vox*np.cos(self.phi1_vox*np.pi/180.), self.r0_vox*np.cos(self.phi1_vox*np.pi/180.),
+                     self.r0_vox*np.cos(self.phi1_vox*np.pi/180.), self.r0_vox*np.cos(self.phi0_vox*np.pi/180.),                     
+        ]
+        
+        y_coords = [ self.r0_vox*np.sin(self.phi0_vox*np.pi/180.), self.r1_vox*np.sin(self.phi0_vox*np.pi/180.),
+                     self.r1_vox*np.sin(self.phi1_vox*np.pi/180.), self.r0_vox*np.sin(self.phi1_vox*np.pi/180.),
+                     self.r0_vox*np.sin(self.phi0_vox*np.pi/180.), self.r0_vox*np.sin(self.phi0_vox*np.pi/180.),                                          
+                     self.r1_vox*np.sin(self.phi0_vox*np.pi/180.), self.r1_vox*np.sin(self.phi0_vox*np.pi/180.), 
+                     self.r1_vox*np.sin(self.phi0_vox*np.pi/180.), self.r1_vox*np.sin(self.phi1_vox*np.pi/180.),
+                     self.r1_vox*np.sin(self.phi1_vox*np.pi/180.), self.r1_vox*np.sin(self.phi1_vox*np.pi/180.),                     
+                     self.r1_vox*np.sin(self.phi1_vox*np.pi/180.), self.r0_vox*np.sin(self.phi1_vox*np.pi/180.),
+                     self.r0_vox*np.sin(self.phi1_vox*np.pi/180.), self.r0_vox*np.sin(self.phi1_vox*np.pi/180.),
+                     self.r0_vox*np.sin(self.phi1_vox*np.pi/180.), self.r0_vox*np.sin(self.phi0_vox*np.pi/180.),                     
+        ]
+        
+        z_coords = [ self.z0_vox, self.z0_vox,
+                     self.z0_vox, self.z0_vox,
+                     self.z0_vox, self.z1_vox,
+                     self.z1_vox, self.z0_vox,
+                     self.z1_vox, self.z1_vox,                     
+                     self.z1_vox, self.z0_vox,                     
+                     self.z0_vox, self.z1_vox,                     
+                     self.z1_vox, self.z0_vox,
+                     self.z1_vox, self.z1_vox,
+        ]        
 
         rows = self.rows[self.rows[:,0] % len(dirs) == 0]
-        vox = voxel[np.where(np.logical_and(voxel[:,4]>=(self.z0_vox-self.gap_space), voxel[:,5]<=(self.z1_vox+self.gap_space)))]
-
-        x_bin_coords = [[vox[i, 0] * np.cos(vox[i, 2] * np.pi / 180.), vox[i, 1] * np.cos(vox[i, 2] * np.pi / 180.),
-                         vox[i, 1] * np.cos(vox[i, 3] * np.pi / 180.), vox[i, 0] * np.cos(vox[i, 3] * np.pi / 180.)] for i in range(len(vox))]
-        y_bin_coords = [[vox[i, 0] * np.sin(vox[i, 2] * np.pi / 180.), vox[i, 1] * np.sin(vox[i, 2] * np.pi / 180.),
-                         vox[i, 1] * np.sin(vox[i, 3] * np.pi / 180.), vox[i, 0] * np.sin(vox[i, 3] * np.pi / 180.)] for i in range(len(vox))]
-        z_bin_coords = [ [vox[i, 4], vox[i, 4], vox[i, 5], vox[i, 5]] for i in range(len(vox)) ]
-        #r_bin_coords = [ [vox[i, 0], vox[i, 1], vox[i, 0], vox[i, 1]] for i in range(len(vox)) ]
-
+        points = pts[ np.where(np.logical_and(pts[:, 2] >= np.min(rows[:, 3]), pts[:, 2] <= np.max(rows[:, 3]))) ]
+        
         trape_data = go.Scatter3d(
             x=x_coords,
             y=y_coords,
             z=z_coords,
             mode='lines',
-            line=dict(color="rgba(232,232,232,0.5)", width=1),
+            line=dict(color="rgba(108, 122, 137, 0.7)", width=3),
             #fillcolor="rgba(232, 232, 232, 0.5)",
         )
 
         trape_bins = go.Scatter3d(
-            x=x_bin_coords[0] + [x_bin_coords[0][0]],
-            y=y_bin_coords[0] + [y_bin_coords[0][0]],
-            z=z_bin_coords[0] + [z_bin_coords[0][0]],
-            mode='lines',
-            line=dict(color='blue', width=0.5),
+            x=points[:,0],
+            y=points[:,1],
+            z=points[:,2],
+            mode='markers',
+            marker=dict(size=2, opacity=1, color='blue'),
         )
 
         points_bins = go.Scatter3d(
@@ -239,13 +259,23 @@ class wc_binning():
             y=rows[:,2],
             z=rows[:,3],
             mode='markers',
-            marker=dict(size=1, opacity=0.5, color='red')
+            marker=dict(size=5, opacity=1, color='red')
         )
 
-        fig.add_trace(trape_data)
         fig.add_trace(trape_bins)
+        fig.add_trace(trape_data)
         fig.add_trace(points_bins)
 
-        fig.show()
-        fig.write_image("test_rebin.png")
+        return fig
 
+def rotate_wcte(points: np.ndarray):
+    """                             
+    Rotates the given 3D points 90 degrees counterclockwise around the x-axis to correct the coordinates because of the WCTE geometry.
+    """
+
+    rotation_matrix = np.array([[1., 0,  0],
+                                [0,  0, -1.],
+                                [0,  1., 0]
+                                ])
+    rotated_points = np.dot(rotation_matrix, points)
+    return rotated_points
