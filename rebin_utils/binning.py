@@ -65,7 +65,7 @@ class wc_binning():
 
     def create_grid(self):
         vox, pts = voxels(-self.zmax, self.zmax, 0, self.rmax, self.gap_space, self.n_phi_start)
-        dirs = directions(self.gap_angle, self.n_phi_start)
+        dirs = directions(self.gap_angle)
         #vox: 0:2 r-range, 2:4 phi-range, 4:6 z-range
         return vox, pts, dirs
 
