@@ -101,26 +101,27 @@ class wc_binning():
         query = '''
         SELECT id, x, y, z, phi, theta, stats, Qmax
         FROM bins
-        WHERE ((SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
-        AND (x/SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
-        AND (y/SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
-        AND (z BETWEEN ? AND ?))
+        WHERE (
+        (ABS(SQRT(POW(x,2)+POW(y,2)) - ?) < ? OR ABS(SQRT(POW(x,2)+POW(y,2)) - ?) < ? OR SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
+        AND 
+        ((ATAN2(y, x)*180./? + 360.) % 360. BETWEEN ? AND ?)
+        AND
+        (ABS(z - ?) < ? OR ABS(z - ?) < ? OR (z BETWEEN ? AND ?)))
         ;
         '''
+        #(SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
+        #AND (x/SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
+        #AND (y/SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
+        #AND (z BETWEEN ? AND ?))
         #OR (
-        #(ABS(SQRT(POW(x,2)+POW(y,2)) - ?) < ? OR ABS(SQRT(POW(x,2)+POW(y,2)) - ?) < ?)
-        #AND 
-        #((ABS((ATAN2(x, y)*180./? + 360.) % 360. - ?) < ?) OR (ABS((ATAN2(x, y)*180./? + 360.) % 360. - ?) < ?))
-        #AND
-        #(ABS(z - ?) < ? OR ABS(z - ?) < ?)
-        #self.r0_vox, 0.5*self.gap_space, self.r1_vox, 0.5*self.gap_space,
-        #math.pi, self.phi0_vox, 0.5*math.fabs(self.phi1_vox-self.phi0_vox), math.pi, self.phi1_vox, 0.5*math.fabs(self.phi1_vox-self.phi0_vox),
-        #self.z0_vox, 0.5*self.gap_space, self.z1_vox, 0.5*self.gap_space
-
-        c.execute(query, (self.r0_vox, self.r1_vox,
-                          min(math.cos(self.phi0_vox*math.pi/180.), math.cos(self.phi1_vox*math.pi/180.)), max(math.cos(self.phi0_vox*math.pi/180.), math.cos(self.phi1_vox*math.pi/180.)),
-                          min(math.sin(self.phi0_vox*math.pi/180.), math.sin(self.phi1_vox*math.pi/180.)), max(math.sin(self.phi0_vox*math.pi/180.), math.sin(self.phi1_vox*math.pi/180.)),
-                          self.z0_vox, self.z1_vox))
+        #self.r0_vox, self.r1_vox,
+        #min(math.cos(self.phi0_vox*math.pi/180.), math.cos(self.phi1_vox*math.pi/180.)), max(math.cos(self.phi0_vox*math.pi/180.), math.cos(self.phi1_vox*math.pi/180.)),
+        #min(math.sin(self.phi0_vox*math.pi/180.), math.sin(self.phi1_vox*math.pi/180.)), max(math.sin(self.phi0_vox*math.pi/180.), math.sin(self.phi1_vox*math.pi/180.)),
+        #self.z0_vox, self.z1_vox,
+                          
+        c.execute(query, (self.r0_vox, 0.5*self.gap_space, self.r1_vox, 0.5*self.gap_space, self.r0_vox, self.r1_vox,
+                          math.pi, self.phi0_vox, self.phi1_vox,
+                          self.z0_vox, 0.5*self.gap_space, self.z1_vox, 0.5*self.gap_space, self.z0_vox, self.z1_vox))
         self.rows = np.array(c.fetchall())
         print(f"Fetched {len(self.rows)} bins that covers the generated voxel from db")
         conn.close()
