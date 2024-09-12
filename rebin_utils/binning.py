@@ -168,7 +168,6 @@ class wc_binning():
                               SET stats = ?, Qmax = ?
                               WHERE id = ?"""
         for i, r in enumerate(self.rows):
-            print(i, bin_stats[i], bin_Qmax[i])
             c.execute(sql_update_query, (bin_stats[i]+r[-2], max(bin_Qmax[i],r[-1]), r[0]))
         conn.commit()
         conn.close()
@@ -181,7 +180,7 @@ class wc_binning():
                                                         compression=self.cmprs, compression_opts=self.cmprs_opt)
         if self.drop_unhit:
             nhits_total = np.sum(sum_hit>0, axis = 1)
-            _, hit_indices = np.where(sum_hits > 0)
+            _, hit_indices = np.where(sum_hit > 0)
             assert len(hit_indices) == np.sum(nhits_total), 'The number of hits is not consistent.'
             concat_charge = sum_charge[sum_hit>0].flatten()
             concat_time = sum_time[sum_hit>0].flatten()
