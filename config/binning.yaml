@@ -35,3 +35,4 @@ Detector:
 Format:
   compression: gzip
   compression_opt: 5
+  drop_unhit: True

@@ -57,6 +57,7 @@ class wc_binning():
         self.dset = {}
         self.cmprs = cfg['Format'].get('compression', 'gzip')
         self.cmprs_opt = cfg['Format'].get('compression_opts', 5)
+        self.drop_unhit = cfg['Format'].get('drop_unhit', False)
 
     def load_data(self):
         # Load the data from the h5 file
@@ -109,15 +110,6 @@ class wc_binning():
         (ABS(z - ?) < ? OR ABS(z - ?) < ? OR (z BETWEEN ? AND ?)))
         ;
         '''
-        #(SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
-        #AND (x/SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
-        #AND (y/SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
-        #AND (z BETWEEN ? AND ?))
-        #OR (
-        #self.r0_vox, self.r1_vox,
-        #min(math.cos(self.phi0_vox*math.pi/180.), math.cos(self.phi1_vox*math.pi/180.)), max(math.cos(self.phi0_vox*math.pi/180.), math.cos(self.phi1_vox*math.pi/180.)),
-        #min(math.sin(self.phi0_vox*math.pi/180.), math.sin(self.phi1_vox*math.pi/180.)), max(math.sin(self.phi0_vox*math.pi/180.), math.sin(self.phi1_vox*math.pi/180.)),
-        #self.z0_vox, self.z1_vox,
                           
         c.execute(query, (self.r0_vox, 0.5*self.gap_space, self.r1_vox, 0.5*self.gap_space, self.r0_vox, self.r1_vox,
                           math.pi, self.phi0_vox, self.phi1_vox,
@@ -185,15 +177,32 @@ class wc_binning():
         sum_charge[bin_stats>0] /= bin_stats[bin_stats>0][:, np.newaxis]
         sum_time[bin_stats>0] /= bin_stats[bin_stats>0][:, np.newaxis]
 
+        self.dset['vertices'] = self.fh5.create_dataset('vertices', data=bindata.copy(),
+                                                        compression=self.cmprs, compression_opts=self.cmprs_opt)
+        if self.drop_unhit:
+            nhits_total = np.sum(sum_hit>0, axis = 1)
+            _, hit_indices = np.where(sum_hits > 0)
+            assert len(hit_indices) == np.sum(nhits_total), 'The number of hits is not consistent.'
+            concat_charge = sum_charge[sum_hit>0].flatten()
+            concat_time = sum_time[sum_hit>0].flatten()
+            assert len(concat_charge) == len(concat_time) and len(concat_charge) == len(hit_indices), 'The number of charges and times is not consistent.'
 
-        self.dset['vertices']   = self.fh5.create_dataset('vertices', data=bindata.copy(),
-                                                          compression=self.cmprs, compression_opts=self.cmprs_opt)
-        self.dset['hit_pmt']    = self.fh5.create_dataset('hit_pmt', data=sum_hit.copy(),
-                                                          compression=self.cmprs, compression_opts=self.cmprs_opt)
-        self.dset['hit_charge'] = self.fh5.create_dataset('hit_charge', data=sum_charge.copy(),
-                                                          compression=self.cmprs, compression_opts=self.cmprs_opt)
-        self.dset['hit_time']   = self.fh5.create_dataset('hit_time', data=sum_time.copy(),
-                                                          compression=self.cmprs, compression_opts=self.cmprs_opt)
+            self.dset['nhit_per_event'] = self.fh5.create_dataset('nhit_per_event', data=nhits_total.copy(),
+                                                                  compression=self.cmprs, compression_opts=self.cmprs_opt)
+            self.dset['hit_pmt']        = self.fh5.create_dataset('hit_pmt', data=hit_indices.copy(),
+                                                                  compression=self.cmprs, compression_opts=self.cmprs_opt)
+            self.dset['hit_charge']     = self.fh5.create_dataset('hit_charge', data=concat_charge.copy(),
+                                                                  compression=self.cmprs, compression_opts=self.cmprs_opt)
+            self.dset['hit_time']       = self.fh5.create_dataset('hit_time', data=concat_time.copy(),
+                                                                  compression=self.cmprs, compression_opts=self.cmprs_opt)
+
+        else:
+            self.dset['hit_pmt']    = self.fh5.create_dataset('hit_pmt', data=sum_hit.copy(),
+                                                              compression=self.cmprs, compression_opts=self.cmprs_opt)
+            self.dset['hit_charge'] = self.fh5.create_dataset('hit_charge', data=sum_charge.copy(),
+                                                              compression=self.cmprs, compression_opts=self.cmprs_opt)
+            self.dset['hit_time']   = self.fh5.create_dataset('hit_time', data=sum_time.copy(),
+                                                              compression=self.cmprs, compression_opts=self.cmprs_opt)
         self.fh5.close()
         print(f"Written to h5 file {self.outfile}.")
 
