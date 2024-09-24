@@ -5,8 +5,11 @@ import yaml
 import glob
 import os
 import math
+import time
 
 from datetime import datetime
+from contextlib import closing
+from collections import defaultdict
 
 from wcprod.utils import voxels, directions
 
@@ -48,6 +51,8 @@ class wc_binning():
         assert os.path.isfile(self.infile), 'Input file does not exist.'
 
         self.dbfile = cfg['Database']['db_file']
+        self.num_shards = cfg['Database'].get('num_shards', 100)
+        self._conn = sqlite3.connect(self.dbfile)
 
         self.wall_cut = cfg['Action']['wall_cut']
         self.towall_cut = cfg['Action']['towall_cut']
@@ -71,18 +76,41 @@ class wc_binning():
         #vox: 0:2 r-range, 2:4 phi-range, 4:6 z-range
         return vox, pts, dirs
 
-    def create_db(self, pts, dirs):
-        if os.path.exists(self.dbfile):
-            return
-        conn = sqlite3.connect(self.dbfile)
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS bins
-                     (id INTEGER, x REAL, y REAL, z REAL, phi REAL, theta REAL, stats INTEGER, Qmax REAL)''')
-        for i, p in enumerate(pts):
-            for j, d in enumerate(dirs):
-                c.execute("INSERT INTO bins VALUES (?,?,?,?,?,?,?,?)", (i*len(dirs)+j, p[0], p[1], p[2], d[1], d[0], 0, 0))
-        conn.commit()
-        conn.close()
+    def create_sharded_db(self, pts, dirs):
+        start_time = time.time()
+        with closing(self._conn.cursor()) as c:
+            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='shard_info'")
+            result = c.fetchall()
+            if len(result) < 1:
+                c.execute('''CREATE TABLE IF NOT EXISTS shard_info
+                             (shard_id INTEGER PRIMARY KEY, min_id INTEGER, max_id INTEGER)''')
+
+                for shard in range(self.num_shards):
+                    c.execute(f'''CREATE TABLE IF NOT EXISTS bins_{shard}
+                             (id INTEGER, x REAL, y REAL, z REAL, phi REAL, theta REAL, stats INTEGER, Qmax REAL)''')
+
+                total_rows = len(pts) * len(dirs)
+                rows_per_shard = math.ceil(total_rows / self.num_shards)
+
+                insert_data = [[] for _ in range(self.num_shards)]
+                shard_info = []
+
+                for i, p in enumerate(pts):
+                    for j, d in enumerate(dirs):
+                        row_id = i * len(dirs) + j
+                        shard_id = row_id // rows_per_shard
+                        insert_data[shard_id].append((row_id, p[0], p[1], p[2], d[1], d[0], 0, 0))
+
+                for shard in range(self.num_shards):
+                    if insert_data[shard]:
+                        min_id = insert_data[shard][0][0]
+                        max_id = insert_data[shard][-1][0]
+                        shard_info.append((shard, min_id, max_id))
+                        c.executemany(f"INSERT INTO bins_{shard} VALUES (?,?,?,?,?,?,?,?)", insert_data[shard])
+
+                c.executemany("INSERT OR REPLACE INTO shard_info VALUES (?,?,?)", shard_info)
+                self._conn.commit()
+        print(f"Took {time.time()-start_time:.2f} sec creating database: {self.dbfile}.")
 
     def create_final_h5(self):
         print("ouput file:", self.outfile)
@@ -92,85 +120,114 @@ class wc_binning():
         self.fh5.attrs['timestamp'] = str(datetime.now())
 
     def select_bins_from_db(self):
-        conn = sqlite3.connect(self.dbfile)
-        conn.create_function("SQRT",  1, math.sqrt)
-        conn.create_function("POW",   2, math.pow)
-        conn.create_function("ABS",   1, math.fabs)
-        conn.create_function("ATAN2", 2, math.atan2)
-        c = conn.cursor()
+        start_time = time.time()
+        self._conn.create_function("SQRT",  1, math.sqrt)
+        self._conn.create_function("POW",   2, math.pow)
+        self._conn.create_function("ABS",   1, math.fabs)
+        self._conn.create_function("ATAN2", 2, math.atan2)
 
         query = '''
         SELECT id, x, y, z, phi, theta, stats, Qmax
-        FROM bins
+        FROM bins_{shard}
         WHERE (
-        (ABS(SQRT(POW(x,2)+POW(y,2)) - ?) < ? OR ABS(SQRT(POW(x,2)+POW(y,2)) - ?) < ? OR SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
+        (SQRT(POW(x,2)+POW(y,2)) BETWEEN ? AND ?)
         AND 
         ((ATAN2(y, x)*180./? + 360.) % 360. BETWEEN ? AND ?)
         AND
-        (ABS(z - ?) < ? OR ABS(z - ?) < ? OR (z BETWEEN ? AND ?)))
+        (z BETWEEN ? AND ?))
         ;
         '''
-                          
-        c.execute(query, (self.r0_vox, 0.5*self.gap_space, self.r1_vox, 0.5*self.gap_space, self.r0_vox, self.r1_vox,
-                          math.pi, self.phi0_vox, self.phi1_vox,
-                          self.z0_vox, 0.5*self.gap_space, self.z1_vox, 0.5*self.gap_space, self.z0_vox, self.z1_vox))
-        self.rows = np.array(c.fetchall())
-        print(f"Fetched {len(self.rows)} bins that covers the generated voxel from db")
-        conn.close()
+
+        with closing(self._conn.cursor()) as c:
+            all_rows = []
+            for shard in range(self.num_shards):
+                c.execute(f"SELECT name FROM sqlite_master where type='index' AND name = 'idx_bins_{shard}_x_y_z'")
+                if not c.fetchone():
+                    c.execute(f'CREATE INDEX idx_bins_{shard}_x_y_z ON bins_{shard} (x, y, z)')
+
+                shard_query = query.format(shard=shard)
+                c.execute(shard_query, (self.r0_vox, self.r1_vox,
+                                        math.pi, self.phi0_vox, self.phi1_vox,
+                                        self.z0_vox, self.z1_vox))
+                shard_rows = c.fetchall()
+                all_rows.extend(shard_rows)
+
+        self.rows = np.array(all_rows)
+        print(f"Took {time.time()-start_time:.2f} sec to fetch {len(self.rows)} bins that covers the generated voxel from db.")
+
+    def update_sharded_db(self, bin_stats, bin_Qmax):
+        start_time = time.time()
+        sql_update_query = """UPDATE bins_{shard}
+                              SET stats = ?, Qmax = ?
+                              WHERE id = ?"""
+        shard_update_data = defaultdict(list)
+        with closing(self._conn.cursor()) as c:
+            for i, r in enumerate(self.rows):
+                stats_value = bin_stats[i] + r[-2]  # Compute stats
+                Qmax_value = max(bin_Qmax[i], r[-1])  # Compute Qmax
+                row_id = r[0]
+                c.execute("SELECT shard_id FROM shard_info WHERE ? BETWEEN min_id and max_id", (row_id,))
+                shard_id = c.fetchone()[0]
+                shard_update_data[shard_id].append((stats_value, Qmax_value, row_id))
+
+            # Optimize SQLite for bulk updates
+            c.execute("PRAGMA journal_mode = WAL")
+            c.execute("PRAGMA synchronous = NORMAL")
+            c.execute("PRAGMA cache_size = -64000")  # 64MB cache
+
+            self._conn.execute("BEGIN TRANSACTION")
+
+            try:
+                for shard in range(self.num_shards):
+                    if shard in shard_update_data:
+                        shard_query = sql_update_query.format(shard=shard)
+                        c.executemany(shard_query, shard_update_data[shard])
+                self._conn.commit()
+            except Exception as e:
+                self._conn.rollback()
+                print(f"Error updating shard {shard}: {e}")
+                raise e
+        print(f"Took {time.time()-start_time:.2f} sec to update the database.")
 
     def process_dset(self):
 
-        alldata = np.concatenate((self.data['position'][:]*10., self.data['direction'][:]), axis = 1)
-        hit_pmt = self.data['digi_pmt'][:]    
+        alldata = np.concatenate((self.data['position'][:], self.data['direction'][:]), axis = 1)
+        all_pos_rot = rotate_wcte(alldata[:, :3])
+        all_dir_rot = rotate_wcte(alldata[:, 3:])
+        alldata_rot = np.concatenate((all_pos_rot, all_dir_rot), axis = 1)
+
+        #wcsim output converts mm to cm
+        all_bin_pos = self.rows[:, 1:4]/10.
+        all_bin_dir = np.array([np.cos(self.rows[:, 4] * np.pi / 180.) * np.sin(self.rows[:, 5] * np.pi / 180.),
+                                np.sin(self.rows[:, 4] * np.pi / 180.) * np.sin(self.rows[:, 5] * np.pi / 180.),
+                                np.cos(self.rows[:, 5] * np.pi / 180.)])
+
+        all_bin_dist = np.linalg.norm(alldata_rot[:, np.newaxis,:3] - all_bin_pos[np.newaxis, :,:], axis = 2)
+        all_ang_diff = np.degrees(np.arccos(np.dot(all_dir_rot, all_bin_dir))) # use degrees so it's numerically closer to the position in cm
+
+        dist_bin = np.sqrt(all_bin_dist**2 + all_ang_diff**2)
+        nearest_grid_indices = np.argmin(dist_bin, axis = 1)
+
+        hit_pmt = self.data['digi_pmt'][:]
         hit_charge = self.data['digi_charge'][:]
         hit_time = self.data['digi_time'][:]
 
         mask = (hit_pmt >= 0) & (hit_pmt < self.npmt)
         
-        bindata = np.zeros(shape=(len(self.rows), 5), dtype=float)
+        bindata = self.rows[:,1:6]
         sum_hit = np.zeros(shape=(len(self.rows), self.npmt), dtype=float)
         sum_charge = np.zeros(shape=(len(self.rows), self.npmt), dtype=float)
         sum_time = np.zeros(shape=(len(self.rows), self.npmt), dtype=float)
 
-        bin_stats = np.zeros(shape=(len(self.rows),), dtype=int)
         bin_Qmax = np.zeros(shape=(len(self.rows),), dtype=float)
 
-        for i, d in enumerate(alldata):
-            pos_rot = rotate_wcte(d[:3])
-            dir_rot = rotate_wcte(d[3:])
+        sum_hit[nearest_grid_indices] = np.sum(hit_pmt[mask], axis = 0)
+        sum_charge[nearest_grid_indices] = np.sum(hit_charge[mask], axis = 0)
+        sum_time[nearest_grid_indices] = np.sum(hit_time[mask], axis = 0)
 
-            min_dist = self.gap_space
-            min_angle = 1.
-            min_idx = -1
-            
-            for j, r in enumerate(self.rows):
-                bin_dir = np.array([np.cos(r[4]*np.pi/180.)*np.sin(r[5]*np.pi/180.), np.sin(r[4]*np.pi/180.)*np.sin(r[5]*np.pi/180.), np.cos(r[5]*np.pi/180.)])
-                dist_angle = np.linalg.norm(dir_rot - bin_dir)
-                if (np.linalg.norm(r[1:4] - pos_rot) <= min_dist) and (dist_angle <= min_angle):
-                    min_dist = np.linalg.norm(r[1:4] - pos_rot)                    
-                    min_angle = dist_angle
-                    min_idx = j
-
-            if min_idx == -1:
-                continue
-            else:
-                bindata[min_idx] = self.rows[min_idx][1:6]
-                sum_hit[min_idx][hit_pmt[i][mask[i]]] += 1
-                sum_charge[min_idx][hit_pmt[i][mask[i]]] += hit_charge[i][mask[i]]
-                sum_time[min_idx][hit_pmt[i][mask[i]]] += hit_time[i][mask[i]]
-                bin_stats[min_idx] += 1
-                bin_Qmax[min_idx] = max(bin_Qmax[min_idx], np.max(sum_charge[min_idx])/bin_stats[min_idx])
-
-
-        conn = sqlite3.connect(self.dbfile)
-        c = conn.cursor()
-        sql_update_query = """UPDATE bins
-                              SET stats = ?, Qmax = ?
-                              WHERE id = ?"""
-        for i, r in enumerate(self.rows):
-            c.execute(sql_update_query, (bin_stats[i]+r[-2], max(bin_Qmax[i],r[-1]), r[0]))
-        conn.commit()
-        conn.close()
+        bin_stats = np.bincount(nearest_grid_indices, minlength=len(self.rows))
+        bin_Qmax[bin_stats>0] = np.max(sum_charge, axis=1)[bin_stats>0]/bin_stats[bin_stats>0]
+        #print(np.sum(bin_stats>0), np.max(bin_stats), np.mean(bin_stats[bin_stats>0]), np.std(bin_stats[bin_stats>0]))
 
         sum_hit[bin_stats>0] /= bin_stats[bin_stats>0][:, np.newaxis]
         sum_charge[bin_stats>0] /= bin_stats[bin_stats>0][:, np.newaxis]
@@ -204,6 +261,8 @@ class wc_binning():
                                                               compression=self.cmprs, compression_opts=self.cmprs_opt)
         self.fh5.close()
         print(f"Written to h5 file {self.outfile}.")
+
+        return bin_stats, bin_Qmax
 
     def visualize_bin_selection(self, pts, dirs):
         import plotly.graph_objects as go
@@ -286,5 +345,5 @@ def rotate_wcte(points: np.ndarray):
                                 [0,  0, -1.],
                                 [0,  1., 0]
                                 ])
-    rotated_points = np.dot(rotation_matrix, points)
+    rotated_points = np.dot(rotation_matrix, points.T).T
     return rotated_points

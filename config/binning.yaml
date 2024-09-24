@@ -28,6 +28,7 @@ Action:
 
 Database:
   db_file:
+  num_shards: 100
 
 Detector:
   npmt: 10184
