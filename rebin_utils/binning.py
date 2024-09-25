@@ -23,12 +23,12 @@ class wc_binning():
             else:
                 cfg_gen = yaml.safe_load(cfg_gen)
             assert type(cfg_gen) is dict
-            self.r0_vox = float(cfg_gen['r0_Vox'])
-            self.r1_vox = float(cfg_gen['r1_Vox'])
-            self.z0_vox = float(cfg_gen['z0_Vox'])
-            self.z1_vox = float(cfg_gen['z1_Vox'])
-            self.phi0_vox = float(cfg_gen['phi0_Vox'])
-            self.phi1_vox = float(cfg_gen['phi1_Vox'])
+            self.r0_vox = float(cfg_gen['r0'])
+            self.r1_vox = float(cfg_gen['r1'])
+            self.z0_vox = float(cfg_gen['z0'])
+            self.z1_vox = float(cfg_gen['z1'])
+            self.phi0_vox = float(cfg_gen['phi0'])
+            self.phi1_vox = float(cfg_gen['phi1'])
 
     def configure(self, cfg):
         if type(cfg) == str:
