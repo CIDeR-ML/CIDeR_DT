@@ -162,20 +162,21 @@ class wc_binning():
                               WHERE id = ?"""
         shard_update_data = defaultdict(list)
         with closing(self._conn.cursor()) as c:
-            for i, r in enumerate(self.rows):
-                stats_value = bin_stats[i] + r[-2]  # Compute stats
-                Qmax_value = max(bin_Qmax[i], r[-1])  # Compute Qmax
-                row_id = r[0]
-                c.execute("SELECT shard_id FROM shard_info WHERE ? BETWEEN min_id and max_id", (row_id,))
-                shard_id = c.fetchone()[0]
-                shard_update_data[shard_id].append((stats_value, Qmax_value, row_id))
-
             # Optimize SQLite for bulk updates
             c.execute("PRAGMA journal_mode = WAL")
             c.execute("PRAGMA synchronous = NORMAL")
             c.execute("PRAGMA cache_size = -64000")  # 64MB cache
-
             self._conn.execute("BEGIN TRANSACTION")
+            for i, r in enumerate(self.rows):
+                row_id = r[0]
+                c.execute("SELECT shard_id FROM shard_info WHERE ? BETWEEN min_id and max_id", (row_id,))
+                shard_id = c.fetchone()[0]
+                #check if there is any update for this row
+                c.execute(f"SELECT stats, Qmax FROM bins_{shard_id} WHERE id = ?", (row_id,))
+                new_stats, new_qmax = list(c.fetchall()[0])
+                stats_value = bin_stats[i] + max(r[-2], new_stats)  # Compute stats
+                Qmax_value = max(bin_Qmax[i], max(r[-1], new_qmax))  # Compute Qmax
+                shard_update_data[shard_id].append((stats_value, Qmax_value, row_id))
 
             try:
                 for shard in range(self.num_shards):
@@ -184,13 +185,16 @@ class wc_binning():
                         c.executemany(shard_query, shard_update_data[shard])
                 self._conn.commit()
             except Exception as e:
+                if "databse is locked" in str(e):
+                    time.sleep(10)
                 self._conn.rollback()
-                print(f"Error updating shard {shard}: {e}")
+                print(f"Error updating shard {shard_id}: {e}")
                 raise e
         print(f"Took {time.time()-start_time:.2f} sec to update the database.")
 
     def process_dset(self):
 
+        start_time = time.time()
         alldata = np.concatenate((self.data['position'][:], self.data['direction'][:]), axis = 1)
         all_pos_rot = rotate_wcte(alldata[:, :3])
         all_dir_rot = rotate_wcte(alldata[:, 3:])
@@ -260,7 +264,7 @@ class wc_binning():
             self.dset['hit_time']   = self.fh5.create_dataset('hit_time', data=sum_time.copy(),
                                                               compression=self.cmprs, compression_opts=self.cmprs_opt)
         self.fh5.close()
-        print(f"Written to h5 file {self.outfile}.")
+        print(f"Took {time.time()-start_time:.2f} sec to write to h5 file {self.outfile}.")
 
         return bin_stats, bin_Qmax
 

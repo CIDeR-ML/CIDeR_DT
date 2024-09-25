@@ -91,7 +91,6 @@ class WCSim:
             "energy": sum(p.GetE() for p in particles)  # sum of energies
         }
 
-
 def get_label(infile):
     if "_gamma" in infile:
         label = 0
@@ -105,15 +104,3 @@ def get_label(infile):
         print("Unknown input file particle type")
         raise SystemExit
     return label
-
-#def rotate_wcte(points: np.ndarray):
-#    """
-#    Rotates the given 3D points 90 degrees counterclockwise around the x-axis to correct the coordinates because of the WCTE geometry.
-    """
-
-#    rotation_matrix = np.array([[1., 0,  0],
-#                                [0,  0, -1.],
-#                                [0,  1., 0]
-#                                ])
-#    rotated_points = np.dot(rotation_matrix, points)
-#    return rotated_points
