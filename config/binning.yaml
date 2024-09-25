@@ -1,0 +1,39 @@
+# binning scheme for photon position and direction
+
+Data:
+  input_file:
+  output_file:
+  dset_names:
+      - position
+      - direction
+      - digi_pmt
+      - digi_charge
+      - digi_time
+
+Position:
+  rmax: 200
+  zmax: 180
+  gap_space: 5
+  n_bins_phi0: 50
+
+Direction:
+  gap_angle: 15
+
+Energy:
+  n_bins: 1
+
+Action:
+  wall_cut: True
+  towall_cut: True
+
+Database:
+  db_file:
+  num_shards: 100
+
+Detector:
+  npmt: 10184
+
+Format:
+  compression: gzip
+  compression_opt: 5
+  drop_unhit: True
