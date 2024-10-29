@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="d26330e8-322c-4b4c-88ee-67ea39790f5f" name="junjie@s3dflogin.slac.stanford.edu">
+        <fileTransfer rootFolder="/sdf/home/j/junjie/SIREN/CIDeR_DT/CIDeR_DT" accessType="SFTP" host="s3dflogin.slac.stanford.edu" port="22" sshConfigId="59f24d73-e5ef-4af9-8f89-93aee5c1d2bc" sshConfig="junjie@s3dflogin.slac.stanford.edu:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" isUseRsync="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

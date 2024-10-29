@@ -7,4 +7,4 @@ def main(config_file, config_gen):
     _rebin.create_sharded_db(pts, dirs)
 
 if __name__ == '__main__':
-    fire.fire(main)
+    fire.Fire(main)
