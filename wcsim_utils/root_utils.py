@@ -48,14 +48,15 @@ class WCSim:
         self.get_trigger(0)
         tracks = self.trigger.GetTracks()
         # Primary particles with no parent are the initial simulation
-        particles = [t for t in tracks if t.GetFlag() == 0 and t.GetParenttype() == 0]
+        #particles = [t for t in tracks if t.GetFlag() == 0 and t.GetParenttype() == 0]
+        particles = [t for t in tracks if t.GetParenttype() == 0]
         # Check there is exactly one particle with no parent:
         if len(particles) == 1:
             # Only one primary, this is the particle being simulated
             return {
                 "pid": particles[0].GetIpnu(),
-                "position": [particles[0].GetStart(i) for i in range(3)],
-                "direction": [particles[0].GetDir(i) for i in range(3)],
+                #"position": [particles[0].GetStart(i) for i in range(3)],
+                #"direction": [particles[0].GetDir(i) for i in range(3)],
                 "energy": particles[0].GetE()
             }
         # Particle with flag -1 is the incoming neutrino or 'dummy neutrino' used for gamma
@@ -66,8 +67,8 @@ class WCSim:
         if isConversion and len(neutrino) == 1 and neutrino[0].GetIpnu() == 22:
             return {
                 "pid": 22,
-                "position": [particles[0].GetStart(i) for i in range(3)], # e+ / e- should have same position
-                "direction": [neutrino[0].GetDir(i) for i in range(3)],
+                #"position": [particles[0].GetStart(i) for i in range(3)], # e+ / e- should have same position
+                #"direction": [neutrino[0].GetDir(i) for i in range(3)],
                 "energy": neutrino[0].GetE()
             }
         # Check for dummy neutrino from old gamma simulations that didn't save the gamma info
@@ -77,8 +78,8 @@ class WCSim:
             norm = np.sqrt(sum(p ** 2 for p in momentum))
             return {
                 "pid": 22,
-                "position": [particles[0].GetStart(i) for i in range(3)],  # e+ / e- should have same position
-                "direction": [p / norm for p in momentum],
+                #"position": [particles[0].GetStart(i) for i in range(3)],  # e+ / e- should have same position
+                #"direction": [p / norm for p in momentum],
                 "energy": sum(p.GetE() for p in particles)
             }
         # Otherwise something else is going on... guess info from the primaries
@@ -86,8 +87,8 @@ class WCSim:
         norm = np.sqrt(sum(p ** 2 for p in momentum))
         return {
             "pid": 0,  # there's more than one particle so just use pid 0
-            "position": [sum(p.GetStart(i) for p in particles)/len(particles) for i in range(3)],  # average position
-            "direction": [p / norm for p in momentum],  # direction of sum of momenta
+            #"position": [sum(p.GetStart(i) for p in particles)/len(particles) for i in range(3)],  # average position
+            #"direction": [p / norm for p in momentum],  # direction of sum of momenta
             "energy": sum(p.GetE() for p in particles)  # sum of energies
         }
 

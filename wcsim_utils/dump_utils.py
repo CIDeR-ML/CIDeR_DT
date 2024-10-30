@@ -37,7 +37,14 @@ class WCSimRead(WCSim):
         self.outfile = cfg['data']['output_file']
         self.nevents_per_file = cfg['data']['nevents_per_file']
         self.npmts = cfg['detector']['npmts']
+        self.rmean = 0.5*(cfg['data']['r0'] + cfg['data']['r1'])
+        self.phimean = 0.5*(cfg['data']['phi0'] + cfg['data']['phi1'])
+        self.zmean = 0.5*(cfg['data']['z0'] + cfg['data']['z1'])
+        if cfg['data']['r0'] == 0 and abs(180-self.phimean) <= 1.E-6:
+            self.rmean = 0
 
+        self.pdir = cfg['data'].get('fixphidir', -999)
+        self.tdir = cfg['data'].get('fixthetadir', -999)
         self.cmprs = cfg['format'].get('compression', 'gzip')
         self.cmprs_opt = cfg['format'].get('compression_opt', 5)
 
@@ -75,6 +82,13 @@ class WCSimRead(WCSim):
     def get_nevents(self):
         return self.nevents
 
+    def get_vox_position(self):
+        phi = np.pi/180. * self.phimean
+        x = self.rmean * np.cos(phi)
+        y = self.rmean * np.sin(phi)
+        z = self.zmean
+        return np.array([x, y, z])
+
     @cached(cache)
     def get_digitized_hits(self, ev):
         for value in self.cfg['data']['root_branches']['digi_hits']:
@@ -111,8 +125,8 @@ class WCSimRead(WCSim):
                 self.root_inputs['true_track'].integer(p.GetParentID())
                 try:  # Only works with new tracking branch of WCSim
                     self.root_inputs['true_start_time'].real(p.GetPhotonStartTime())
-                    self.root_inputs['true_start_position'].append([p.GetPhotonStartPos(i) / 10 for i in range(3)])
-                    self.root_inputs['true_end_position'].append([p.GetPhotonEndPos(i) / 10 for i in range(3)])
+                    self.root_inputs['true_start_position'].append([p.GetPhotonStartPos(i) * 10 for i in range(3)])
+                    self.root_inputs['true_end_position'].append([p.GetPhotonEndPos(i) * 10 for i in range(3)])
                 except AttributeError:  # leave as zeros if not using tracking branch
                     pass
         for value in self.cfg['data']['root_branches']['hit_photons']:
@@ -201,12 +215,14 @@ class WCSimRead(WCSim):
         if not self.initialized:
             self.initialize_array()
             self.create_h5()
-            self.initilized = True
+            self.initialized = True
 
         for ev in range(self.nevents):
             
             if self.write_event_info:
                 self.event_info = self.get_event_info()
+                self.event_info["position"] = self.get_vox_position()
+                self.event_info["direction"] = [self.pdir, self.tdir]
                 for value in self.cfg['data']['root_branches']['event_info']:
                     self.root_inputs[value[0]][ev] = self.event_info[value[0]]
 
