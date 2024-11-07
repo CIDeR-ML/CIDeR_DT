@@ -125,8 +125,8 @@ class WCSimRead(WCSim):
                 self.root_inputs['true_track'].integer(p.GetParentID())
                 try:  # Only works with new tracking branch of WCSim
                     self.root_inputs['true_start_time'].real(p.GetPhotonStartTime())
-                    self.root_inputs['true_start_position'].append([p.GetPhotonStartPos(i) * 10 for i in range(3)])
-                    self.root_inputs['true_end_position'].append([p.GetPhotonEndPos(i) * 10 for i in range(3)])
+                    self.root_inputs['true_start_position'].append([p.GetPhotonStartPos(i) for i in range(3)])
+                    self.root_inputs['true_end_position'].append([p.GetPhotonEndPos(i) for i in range(3)])
                 except AttributeError:  # leave as zeros if not using tracking branch
                     pass
         for value in self.cfg['data']['root_branches']['hit_photons']:
