@@ -12,13 +12,12 @@ import ROOT
 import os
 
 from datetime import datetime
-from cachetools import cached, LRUCache
+from functools import lru_cache
 from .root_utils import WCSim
 #from memory_profiler import profile
 #from line_profiler import profile
 
 ROOT.gROOT.SetBatch(True)
-cache = LRUCache(maxsize=100)
 
 dtype_map = {
     'np.int32': np.int32,
@@ -89,7 +88,7 @@ class WCSimRead(WCSim):
         z = self.zmean
         return np.array([x, y, z])
 
-    @cached(cache)
+    @lru_cache(maxsize=100)
     def get_digitized_hits(self, ev):
         for value in self.cfg['data']['root_branches']['digi_hits']:
             self.root_inputs['digi_' + value[0]].begin_list()
@@ -107,7 +106,7 @@ class WCSimRead(WCSim):
         for value in self.cfg['data']['root_branches']['digi_hits']:
             self.root_inputs['digi_' + value[0]].end_list()
 
-    @cached(cache)
+    @lru_cache(maxsize=100)
     def get_hit_photons(self, ev):
         self.get_event(ev)
         for value in self.cfg['data']['root_branches']['hit_photons']:
@@ -133,7 +132,7 @@ class WCSimRead(WCSim):
             if value[0] != 'PE':
                 self.root_inputs['true_'+value[0]].end_list()
 
-    @cached(cache)
+    @lru_cache(maxsize=100)
     def get_tracks(self, ev):
         self.get_event(ev)
         for value in self.cfg['data']['root_branches']['tracks']:
@@ -153,7 +152,7 @@ class WCSimRead(WCSim):
         for value in self.cfg['data']['root_branches']['tracks']:
             self.root_inputs['track_'+value[0]].end_list()
 
-    @cached(cache)
+    @lru_cache(maxsize=100)
     def get_triggers(self, ev):
         self.get_event(ev)
         for value in self.cfg['data']['root_branches']['trigger']:
