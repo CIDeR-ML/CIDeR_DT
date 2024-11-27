@@ -95,11 +95,15 @@ class WCSimRead(WCSim):
         self.get_event(ev)
         for t in range(self.ntrigger):
             self.get_trigger(t)
+            digi_nph = np.zeros(self.npmts, dtype=np.int32)
+            for h in self.trigger.GetCherenkovHits():
+                digi_nph[h.GetTubeID()-1] = h.GetTotalPe(1)
             for hit in self.trigger.GetCherenkovDigiHits():
                 pmt_id = hit.GetTubeId() - 1
 
                 self.root_inputs['digi_pmt'].integer(pmt_id)
                 self.root_inputs['digi_charge'].real(hit.GetQ())
+                self.root_inputs['digi_nph'].integer(digi_nph[pmt_id])
                 self.root_inputs['digi_time'].real(hit.GetT())
                 self.root_inputs['digi_trigger'].integer(t)
 
